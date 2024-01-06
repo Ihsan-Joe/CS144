@@ -1,16 +1,40 @@
+#include "address.hh"
+#include "exception.hh"
 #include "socket.hh"
+#include "exception"
 
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <span>
 #include <string>
+#include <string_view>
+#include <vector>
 
 using namespace std;
 
 void get_URL( const string& host, const string& path )
 {
-  cerr << "Function called: get_URL(" << host << ", " << path << ")\n";
-  cerr << "Warning: get_URL() has not been implemented yet.\n";
+  // cerr << "Function called: get_URL(" << host << ", " << path << ")\n";
+  // cerr << "Warning: get_URL() has not been implemented yet.\n";
+  TCPSocket sockaddr;
+  sockaddr.connect(Address(host, "http"));
+  auto send = [&sockaddr](std::string_view msg){
+    sockaddr.write(msg);
+    sockaddr.write("\r\n");
+  };
+
+  send("GET " + path + " HTTP/1.1");
+  send("Host: " + host);
+  send("Connection: close");
+  send("");
+  
+  std::string tmp;
+  while(!sockaddr.eof())
+  {
+    sockaddr.read(tmp);
+    std::cout << tmp;
+  }
 }
 
 int main( int argc, char* argv[] )
@@ -18,7 +42,7 @@ int main( int argc, char* argv[] )
   try {
     if ( argc <= 0 ) {
       abort(); // For sticklers: don't try to access argv[0] if argc <= 0.
-    }
+    }  
 
     auto args = span( argv, argc );
 

@@ -157,17 +157,19 @@ size_t FileDescriptor::write( string_view buffer )
 
 size_t FileDescriptor::write( const vector<string_view>& buffers )
 {
-  vector<iovec> iovecs;
-  iovecs.reserve( buffers.size() );
-  size_t total_size = 0;
+  vector<iovec> iovecs; // 用于io操作的结构体，存储指向buffer的指针和大小
+  iovecs.reserve( buffers.size() ); // 每一个结构体对应一个buffer
+  size_t total_size = 0; // 全部buffer总大小
+  
+  // 存储每个buffer的相关信息(buffer起始地址，buffer size)
   for ( const auto x : buffers ) {
     iovecs.push_back( { const_cast<char*>( x.data() ), x.size() } ); // NOLINT(*-const-cast)
     total_size += x.size();
   }
-
+  // 因为vector iovecs会线性存放数据，writev刚好接受一个iovec类型指针，因此，writev会给fd写这些数据，也就是发送。
   const ssize_t bytes_written
     = CheckSystemCall( "writev", ::writev( fd_num(), iovecs.data(), static_cast<int>( iovecs.size() ) ) );
-  register_write();
+  register_write(); // write_count_+1
 
   if ( bytes_written == 0 and total_size != 0 ) {
     throw runtime_error( "write returned 0 given non-empty input buffer" );
