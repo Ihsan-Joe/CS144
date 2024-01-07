@@ -12,7 +12,7 @@
 using namespace std;
 
 ByteStream::ByteStream(uint64_t capacity)
-    : capacity_(capacity), writer_close(false), error(false), pushed(0), poped(0), buffer_cur_data_number(0)
+    : capacity_(capacity), writer_close(false), error(false), pushed(0), poped(0), buffer_cur_data_number(0), buffer()
 {
 }
 
