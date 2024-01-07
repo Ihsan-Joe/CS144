@@ -26,7 +26,7 @@ void Writer::push(string data)
     }
 
     const auto n = min(data_size, avai_size);
-    if(data_size > n)
+    if (data_size > n)
     {
         data = data.substr(0, avai_size);
     }
