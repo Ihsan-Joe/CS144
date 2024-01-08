@@ -1,4 +1,5 @@
 #include "byte_stream.hh"
+#include <asm-generic/errno.h>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -25,14 +26,29 @@ void Writer::push(string data)
         return;
     }
 
-    const auto n = min(data_size, avai_size);
-    if (data_size > n)
+    // const auto n = min(data_size, avai_size);
+    // if (data_size > n)
+    // {
+    //     data = data.substr(0, avai_size);
+    // }
+    // buffer.push(move(data));
+    // buffer_cur_data_number += n;
+    // pushed += n;
+
+    uint64_t tmp_number = 0;
+    if (data_size > avai_size)
     {
-        data = data.substr(0, avai_size);
+        buffer.push(data.substr(0, avai_size));
+        tmp_number = avai_size;
     }
-    buffer.push(move(data));
-    buffer_cur_data_number += n;
-    pushed += n;
+    else
+    {
+        buffer.push(std::move(data));
+        tmp_number = data_size;
+    }
+
+    buffer_cur_data_number += tmp_number;
+    pushed += tmp_number;
 }
 
 void Writer::close()
