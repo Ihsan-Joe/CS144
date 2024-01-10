@@ -13,7 +13,7 @@
 using namespace std;
 
 ByteStream::ByteStream(uint64_t capacity)
-    : capacity_(capacity), writer_close(false), error(false), pushed(0), poped(0), buffer_cur_data_number(0), buffer()
+    : capacity_(capacity), m_writer_close(false), m_error(false), m_pushed(0), m_poped(0), m_buffer_cur_data_number(0), m_buffer()
 {
 }
 
@@ -38,89 +38,89 @@ void Writer::push(string data)
     uint64_t tmp_number = 0;
     if (data_size > avai_size)
     {
-        buffer.push(data.substr(0, avai_size));
+        m_buffer.push(data.substr(0, avai_size));
         tmp_number = avai_size;
     }
     else
     {
-        buffer.push(std::move(data));
+        m_buffer.push(std::move(data));
         tmp_number = data_size;
     }
 
-    buffer_cur_data_number += tmp_number;
-    pushed += tmp_number;
+    m_buffer_cur_data_number += tmp_number;
+    m_pushed += tmp_number;
 }
 
 void Writer::close()
 {
-    writer_close = true;
+    m_writer_close = true;
 }
 
 void Writer::set_error()
 {
-    error = true;
+    m_error = true;
 }
 
 bool Writer::is_closed() const
 {
-    return writer_close;
+    return m_writer_close;
 }
 
 uint64_t Writer::available_capacity() const
 {
-    return capacity_ - buffer_cur_data_number;
+    return capacity_ - m_buffer_cur_data_number;
 }
 
 uint64_t Writer::bytes_pushed() const
 {
-    return pushed;
+    return m_pushed;
 }
 
 string_view Reader::peek() const
 {
-    return buffer.front();
+    return m_buffer.front();
 }
 
 bool Reader::is_finished() const
 {
-    return writer_close && !buffer_cur_data_number;
+    return m_writer_close && !m_buffer_cur_data_number;
 }
 
 bool Reader::has_error() const
 {
-    return error;
+    return m_error;
 }
 
 void Reader::pop(uint64_t len)
 {
-    if (buffer_cur_data_number < len || has_error())
+    if (m_buffer_cur_data_number < len || has_error())
     {
         return;
     }
 
-    buffer_cur_data_number -= len;
-    poped += len;
+    m_buffer_cur_data_number -= len;
+    m_poped += len;
 
-    std::string_view tmp_view = buffer.front();
+    std::string_view tmp_view = m_buffer.front();
     while (len > 0)
     {
         if (len < tmp_view.size())
         {
-            buffer.front() = tmp_view.substr(len);
+            m_buffer.front() = tmp_view.substr(len);
             break;
         }
         len -= tmp_view.size();
-        buffer.pop();
-        tmp_view = buffer.front();
+        m_buffer.pop();
+        tmp_view = m_buffer.front();
     }
 }
 
 uint64_t Reader::bytes_buffered() const
 {
-    return buffer_cur_data_number;
+    return m_buffer_cur_data_number;
 }
 
 uint64_t Reader::bytes_popped() const
 {
-    return poped;
+    return m_poped;
 }
