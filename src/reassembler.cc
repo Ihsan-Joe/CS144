@@ -12,7 +12,7 @@ size_t Reassembler::handle_data_string(std::string &src, std::string &dec)
     size_t index = dec.find_first_of(src.back());
     if (index == std::string::npos)
     {
-        return -1;
+        return SIZE_MAX;
     }
     return index + 1;
 }
@@ -59,9 +59,6 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
         return false;
     };
 
-    // 获取上一次insert和这一次的capacity的差异，从而知道上一个data发送到哪儿了。
-    const auto get_poped = [&]() { return output.available_capacity() - m_pre_capacity; };
-
     auto direct_push = [&]() {
         bool success_push = false;
         // data.size > 总available capacity,那就把它修成=总available capacity
@@ -80,20 +77,22 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
         }
         while (success_push && m_rasmblr_buffer.find(m_next_currect_index) != m_rasmblr_buffer.end())
         {
-            std::cout << output.available_capacity() << ',' << m_next_currect_index << ',' << m_rasmblr_buf_cur_data_num
-                      << ',' << m_rasmblr_buffer[m_next_currect_index] << ','
-                      << m_rasmblr_buffer[m_next_currect_index].size() << '\n';
-            auto tmp_size = m_rasmblr_buffer[m_next_currect_index].size();
-            std::string tmp_data = std::move(m_rasmblr_buffer[m_next_currect_index]);
-            m_rasmblr_buf_cur_data_num -= tmp_size;
+            // std::cout << output.available_capacity() << ',' << m_next_currect_index << ',' <<
+            // m_rasmblr_buf_cur_data_num
+            //           << ',' << m_rasmblr_buffer[m_next_currect_index] << ','
+            //           << m_rasmblr_buffer[m_next_currect_index].size() << '\n';
+            m_pre_data = m_rasmblr_buffer[m_next_currect_index];
+            m_rasmblr_buf_cur_data_num -= m_pre_data.size();
             m_pre_index = m_next_currect_index;
-            m_pre_data = tmp_data;
-            m_next_currect_index += tmp_size;
-            std::cout << "tmp_data" << tmp_data << '\n';
+            m_next_currect_index += m_pre_data.size();
+
+            // std::cout << "m_pre_data" << m_pre_data << '\n';
+
             m_rasmblr_buffer.erase(m_next_currect_index);
-            std::cout << output.available_capacity() << ',' << m_next_currect_index << ',' << m_rasmblr_buf_cur_data_num
-                      << '\n';
-            output.push(std::move(tmp_data));
+            output.push(m_pre_data);
+
+            // std::cout << output.available_capacity() << ',' << m_next_currect_index << ',' <<
+            // m_rasmblr_buf_cur_data_num << '\n';
         }
         if (!m_rasmblr_buf_cur_data_num)
         {
@@ -129,30 +128,43 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
     };
 
     auto pre_data_overlap = [&]() {
-        // poped_number 肯定会 >= 0,
-        // 因为available
-        // capacity，上一次output.push后，如果又被output.push，那么这个分支不会被执行，因为m_last_index被改了。
-        const auto poped_number = get_poped();
-        std::cout << "pre_data_overlap : "
-                  << "avlb_capacity:" << avlb_capacity << '\n';
-        std::cout << "pre_data_overlap : "
-                  << "poped_number:" << poped_number << '\n';
-        std::cout << "pre_data_overlap : "
-                  << "data.size():" << data.size() << '\n';
+        // const auto poped_number = get_poped();
+        // std::cout << "pre_data_overlap : "
+        //           << "avlb_capacity:" << avlb_capacity << '\n';
+        // std::cout << "pre_data_overlap : "
+        //           << "poped_number:" << poped_number << '\n';
+        // std::cout << "pre_data_overlap : "
+        //           << "data.size():" << data.size() << '\n';
 
-        if (data.size() > avlb_capacity + poped_number && clean_buffer(data.size() - poped_number, first_index))
+        // if (data.size() > avlb_capacity + poped_number && clean_buffer(data.size() - poped_number, first_index))
+        // {
+        //     // 调整缓冲区大小
+        //     m_next_currect_index = m_pre_index + data.size();
+        //     m_rasmblr_buf_cur_data_num += data.size();
+        //     output.push(std::move(data));
+        // }
+        // else
+        // {
+        //     std::cout << "pre_data_overlap: m_pre_data.size():" << m_pre_data.size() << '\n';
+        //     output.push(data.substr(m_pre_data.size() - 1));
+        //     std::cout << "pre_data_overlap: data.substr(data.size() - m_pre_data.size()):"
+        //               << data.substr(m_pre_data.size() - 1) << '\n';
+        // }
+        size_t index = handle_data_string(m_pre_data, data);
+        if (index == SIZE_MAX)
         {
-            // 调整缓冲区大小
-            m_next_currect_index = m_pre_index + data.size();
-            m_rasmblr_buf_cur_data_num += data.size();
-            output.push(std::move(data));
+            return;
         }
-        else
+        data.erase(0, index);
+        if (data.size() > output.available_capacity())
         {
-            std::cout << "pre_data_overlap: m_pre_data.size():" << m_pre_data.size() << '\n';
-            output.push(data.substr(m_pre_data.size() - 1));
-            std::cout << "pre_data_overlap: data.substr(data.size() - m_pre_data.size()):"
-                      << data.substr(m_pre_data.size() - 1) << '\n';
+            return;
+        }
+        if (data.size() <= avlb_capacity && clean_buffer(data.size(), first_index))
+        {
+            m_pre_data = data;
+            output.push(data);
+            m_next_currect_index = m_pre_index + m_pre_data.size();
         }
     };
 
@@ -164,7 +176,7 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
             direct_push();
         }
         // data index是上一个data的overlap
-        else if (first_index == m_pre_index && data.size() > m_pre_data.size())
+        else if (first_index == m_pre_index && m_pre_data != data)
         {
             pre_data_overlap();
         }
@@ -179,23 +191,22 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
     {
         output.close();
     }
-    m_pre_capacity = output.available_capacity();
 
-    std::cout << "################################# " << count_called++ << " ###################################\n";
-    std::cout << "m_rasmblr_buf_cur_data_num:" << m_rasmblr_buf_cur_data_num << '\n';
-    int i = 0;
-    for (const auto &pair : m_rasmblr_buffer)
-    {
-        std::cout << "m_rasmblr_buffer " << i << ":" << pair.first << "," << pair.second << '\n';
-        i++;
-    }
-    std::cout << "m_next_currect_index:" << m_next_currect_index << '\n';
-    std::cout << "m_pre_index:" << m_pre_index << '\n';
-    std::cout << "m_pre_data:" << m_pre_data << '\n';
-    std::cout << "m_the_last_index:" << m_the_last_index << '\n';
-    std::cout << "avlb_capacity:" << avlb_capacity << '\n';
-    std::cout << "m_pre_capacity:" << m_pre_capacity << '\n';
-    std::cout << "####################################################################\n";
+    // std::cout << "################################# " << count_called++ << " ###################################\n";
+    // std::cout << "m_rasmblr_buf_cur_data_num:" << m_rasmblr_buf_cur_data_num << '\n';
+    // int i = 0;
+    // for (const auto &pair : m_rasmblr_buffer)
+    // {
+    //     std::cout << "m_rasmblr_buffer " << i << ":" << pair.first << "," << pair.second << '\n';
+    //     i++;
+    // }
+    // std::cout << "m_next_currect_index:" << m_next_currect_index << '\n';
+    // std::cout << "m_pre_index:" << m_pre_index << '\n';
+    // std::cout << "m_pre_data:" << m_pre_data << '\n';
+    // std::cout << "m_the_last_index:" << m_the_last_index << '\n';
+    // std::cout << "avlb_capacity:" << avlb_capacity << '\n';
+    // std::cout << "m_pre_capacity:" << m_pre_capacity << '\n';
+    // std::cout << "####################################################################\n";
 }
 
 uint64_t Reassembler::bytes_pending() const
