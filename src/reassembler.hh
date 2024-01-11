@@ -9,9 +9,17 @@
 class Reassembler
 {
 private:
+    int count_called{1};
+    uint64_t m_pre_index{0};
+    uint64_t m_pre_capacity{0}; // 上一次insert的时候的capacity
+    std::string m_pre_data{};
+    uint64_t m_the_last_index{0}; // 存放最后一个index
     uint64_t m_next_currect_index{0};
     uint64_t m_rasmblr_buf_cur_data_num{0};
     std::unordered_map<uint64_t, std::string> m_rasmblr_buffer{};
+
+private:
+    static size_t handle_data_string(std::string &src, std::string &dec);
 
 public:
     /*
