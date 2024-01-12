@@ -11,10 +11,16 @@ class Reassembler
 {
 private:
     std::unordered_map<uint64_t, std::string> m_reassemble_buf{};
-    uint64_t m_buf_availeble_capacity{0};
+    uint64_t m_buf_use_capacity{0};
     uint64_t m_next_index{0};
     uint64_t m_pre_index{0};
     uint64_t m_pre_data_size{0};
+    uint64_t m_first_unassembled_index{0};
+    bool m_write_close{false};
+    
+    uint64_t m_func_calld{0};
+    
+    
 
     enum Classify_Returns
     {
