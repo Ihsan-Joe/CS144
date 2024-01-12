@@ -4,21 +4,29 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 class Reassembler
 {
 private:
-    int count_called{1};
+    std::unordered_map<uint64_t, std::string> m_reassemble_buf{};
+    uint64_t m_buf_availeble_capacity{0};
+    uint64_t m_next_index{0};
     uint64_t m_pre_index{0};
-    std::string m_pre_data{};
-    uint64_t m_the_last_index{0}; // 存放最后一个index
-    uint64_t m_next_currect_index{0};
-    uint64_t m_rasmblr_buf_cur_data_num{0};
-    std::unordered_map<uint64_t, std::string> m_rasmblr_buffer{};
+    uint64_t m_pre_data_size{0};
+
+    enum Classify_Returns
+    {
+        Beyond_Available_Capacity = 0,
+        Direct_Push,
+        Need_Cut_And_Push,
+        Save_The_Buffer,
+        Overlap
+    };
 
 private:
-    static size_t handle_data_string(std::string &src, std::string &dec);
+    Classify_Returns classify(uint64_t first_index, const std::string_view &data, uint64_t available_capacity) const;
 
 public:
     /*
