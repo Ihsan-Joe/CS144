@@ -1,12 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <queue>
-#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <vector>
 
 class Reader;
 class Writer;
