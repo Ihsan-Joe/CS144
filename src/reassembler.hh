@@ -36,7 +36,7 @@ private:
 
 private:
     Classify_Returns classify(uint64_t first_index, const std::string_view &data, uint64_t available_capacity) const;
-
+    friend void tmp_traverse_func(std::forward_list<Reassembler::m_data_struct> &m_reassemble_buf);
 public:
     /*
      * Insert a new substring to be reassembled into a ByteStream.
