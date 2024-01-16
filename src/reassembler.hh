@@ -3,40 +3,24 @@
 #include "byte_stream.hh"
 
 #include <cstdint>
-#include <forward_list>
 #include <string>
-#include <string_view>
 
 class Reassembler
 {
 private:
-    struct m_data_struct
-    {
-        uint64_t index;
-        std::string data_string;
-    };
-    std::forward_list<m_data_struct> m_reassemble_buf{};
-    m_data_struct m_buf_first_data{};
-    uint64_t m_buf_use_capacity{0};
+    // 是不是最后一个字符串
+    bool m_is_last_substring{false};
+    // 缓冲区
+    std::string m_buffer{};
+    // 下一个first_index应该取的值
     uint64_t m_next_index{0};
+    // 上一个发送过去的data package的index
     uint64_t m_pre_index{0};
+    // 上一个发送过去的data package的data size
     uint64_t m_pre_data_size{0};
-    bool m_write_close{false};
     
-    uint64_t m_func_calld{0};
-
-    enum Classify_Returns
-    {
-        Beyond_Available_Capacity = 0,
-        Direct_Push,
-        Need_Cut_And_Push,
-        Save_The_Buffer,
-        Overlap
-    };
-
-private:
-    Classify_Returns classify(uint64_t first_index, const std::string_view &data, uint64_t available_capacity) const;
-    friend void tmp_traverse_func(std::forward_list<Reassembler::m_data_struct> &m_reassemble_buf);
+    void send(Writer &output);
+    void try_close(Writer &output, bool is_last_substring);
 public:
     /*
      * Insert a new substring to be reassembled into a ByteStream.
