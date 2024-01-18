@@ -3,28 +3,21 @@
 #include "byte_stream.hh"
 
 #include <cstdint>
+#include <map>
 #include <string>
 
 class Reassembler
 {
 private:
-    // 是不是最后一个字符串
-    bool m_is_last_substring{false};
-    // 缓冲区
-    std::string m_buffer{};
-    // 下一个first_index应该取的值
+    std::map<int, std::string> m_buffer;
     uint64_t m_next_index{0};
-    // 上一个发送过去的data package的index
     uint64_t m_pre_index{0};
-    // 上一个发送过去的data package的data size
-    uint64_t m_pre_data_size{0};
-    
-    // 用于测试,函数总调用
-    uint64_t func_calld{0};
-    
+    uint64_t m_pre_size{0};
+    bool m_is_last_substring{false};
 
-    void send(Writer &output);
-    void try_close(Writer &output, bool is_last_substring);
+    void send(Writer &writer);
+    void clearup_buffer();
+    void try_close(Writer &writer);
 public:
     /*
      * Insert a new substring to be reassembled into a ByteStream.
