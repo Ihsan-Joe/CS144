@@ -19,6 +19,10 @@ private:
     // 上一个发送过去的data package的data size
     uint64_t m_pre_data_size{0};
     
+    // 用于测试,函数总调用
+    uint64_t func_calld{0};
+    
+
     void send(Writer &output);
     void try_close(Writer &output, bool is_last_substring);
 public:
