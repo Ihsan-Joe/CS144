@@ -3,20 +3,20 @@
 #include "byte_stream.hh"
 
 #include <cstdint>
-#include <map>
 #include <string>
 
 class Reassembler
 {
 private:
-    std::map<uint64_t, std::string> m_buffer;
+    // std::map<uint64_t, std::string> m_buffer;
     uint64_t m_next_index{0};
     uint64_t m_pre_index{0};
     uint64_t m_pre_size{0};
     bool m_is_last_substring{false};
 
-    void continue_push(Writer &writer);
-    void clearup_buffer();
+    bool garbage_package(uint64_t first_index, uint64_t data_size, uint64_t available_capacity) const;
+    bool organize(uint64_t first_index, std::string &data);
+    void send(Writer &writer);
     void try_close(Writer &writer) const;
 public:
     /*

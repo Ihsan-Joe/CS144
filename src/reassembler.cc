@@ -13,78 +13,59 @@ void Reassembler::try_close(Writer &writer) const
     }
 }
 
-void Reassembler::continue_push(Writer &writer)
+bool Reassembler::garbage_package(uint64_t first_index, uint64_t data_size, uint64_t available_capacity) const
 {
+    // 缓存位置超过缓存大小
+    if (first_index > m_next_index && first_index - m_next_index > available_capacity)
+    {
+        return false;
+    }
+    // 已经push过的package
+    if (first_index < m_next_index && first_index + data_size <= m_pre_size)
+    {
+        return false;
+    }
+    // 没数据
+    if (data_size == 0)
+    {
+        return false;
+    }
+    return true;
+}
+
+bool Reassembler::organize(uint64_t first_index, std::string &data)
+{
+    // 如果后面有元素合并成一个package
+    // 
+    if (first_index == m_next_index)
+    {
+        return true;
+    }
+    // 需要看前后有没有被重叠的package,有的话都合并成一个，覆盖的直接删掉
+    if (first_index > m_next_index)
+    {
+
+    }
+    return false;
 
 }
 
-void Reassembler::clearup_buffer()
+void Reassembler::send(Writer &writer)
 {
-    if (m_buffer.empty())
-    {
-        return;
-    }
-    auto begin = m_buffer.begin();
-    if (m_pre_index < begin->first)
-    {
-        
-    }
-    
 }
 
 void Reassembler::insert(uint64_t first_index, string data, bool is_last_substring, Writer &output)
 {
-    const auto available_capacity = output.available_capacity();
-    
-    // 如果first_index的位置在缓冲区之外，那么直接丢弃；
-    if (first_index > m_next_index && first_index - m_next_index >= available_capacity)
+    // 处理垃圾数据
+    if (garbage_package(first_index, data.size(), output.available_capacity()))
     {
-        try_close(output);
-        return;
-    }
-    
-    if (first_index == m_next_index)
-    {
-        if (data.size() > available_capacity)
+        // 不是垃圾数据就整理buffer
+        if (organize(first_index, data))
         {
-            data.erase(available_capacity);
+            // 如果需要发送的
+            send(output);
         }
-
-        // 更新上一次发送的package信息
-        m_pre_index = m_next_index;
-        m_pre_size = data.size();
-    
-        // 更新下一个要发送的package的index
-        m_next_index += data.size();
-
-        output.push(std::move(data));
-        
-        auto it = m_buffer.upper_bound(m_next_index);
-        
-
-
-        // clearup_buffer();
-        // continue_push(output);
-        
     }
-
-    else if (first_index > m_next_index)
-    {
-        auto it = m_buffer.upper_bound(m_next_index);
-        auto pre_package = --it;
-        // 如果pre.index + pre.data.size() > m_next_index，那么就不需要处理last
-    }
-
-    else if (first_index == m_pre_index && data.size() > m_pre_size)
-    {
-
-    }
-
-    else if (first_index > m_pre_index && first_index + data.size() > m_next_index)
-    {
-
-    }
-
     m_is_last_substring = is_last_substring;
     try_close(output);
 }
