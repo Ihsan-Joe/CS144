@@ -3,12 +3,16 @@
 #include "byte_stream.hh"
 
 #include <cstdint>
+#include <set>
 #include <string>
+#include <unordered_map>
 
 class Reassembler
 {
 private:
-    // std::map<uint64_t, std::string> m_buffer;
+    std::set<uint64_t> m_start_index_buffer;
+    std::set<uint64_t> m_end_index_buffer;
+    std::unordered_map<uint64_t, std::string> m_package_buffer;
     uint64_t m_next_index{0};
     uint64_t m_pre_index{0};
     uint64_t m_pre_size{0};

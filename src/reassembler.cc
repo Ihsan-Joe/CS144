@@ -36,7 +36,6 @@ bool Reassembler::garbage_package(uint64_t first_index, uint64_t data_size, uint
 bool Reassembler::organize(uint64_t first_index, std::string &data)
 {
     // 如果后面有元素合并成一个package
-    // 
     if (first_index == m_next_index)
     {
         return true;
