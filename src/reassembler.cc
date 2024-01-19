@@ -71,7 +71,6 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
     }
     else if (first_index > m_next_index)
     {
-
         // 因为缓冲区的第0个坐标就是m_next_index
         auto insert_position = first_index - m_next_index;
         if (data.size() > available_capacity - insert_position)
@@ -81,20 +80,23 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
         }
         m_buffer.replace(insert_position, data.size(), data);
     }
-    else if (first_index + data.size() > m_next_index)
+    else
     {
-        // 去掉前面已经push过的内容
-        data = data.substr(m_next_index - first_index);
-        // 去掉后面超过
-        if (data.size() > available_capacity)
+        if (first_index + data.size() > m_next_index)
         {
-            data.erase(available_capacity);
+            // 去掉前面已经push过的内容
+            data = data.substr(m_next_index - first_index);
+            // 去掉后面超过
+            if (data.size() > available_capacity)
+            {
+                data.erase(available_capacity);
+            }
+            m_buffer.replace(0, data.size(), data);
+            send(output);
         }
-        m_buffer.replace(0, data.size(), data);
-        send(output);
     }
+
     try_close(output, is_last_substring);
-    func_calld++;
 
     // 剩下的有: 这两种情况直接丢弃
     // first_index < m_next_index && first_index + data.size() < m_next_index
