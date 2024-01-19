@@ -9,15 +9,15 @@
 class Reassembler
 {
 private:
-    std::map<int, std::string> m_buffer;
+    std::map<uint64_t, std::string> m_buffer;
     uint64_t m_next_index{0};
     uint64_t m_pre_index{0};
     uint64_t m_pre_size{0};
     bool m_is_last_substring{false};
 
-    void send(Writer &writer);
+    void continue_push(Writer &writer);
     void clearup_buffer();
-    void try_close(Writer &writer);
+    void try_close(Writer &writer) const;
 public:
     /*
      * Insert a new substring to be reassembled into a ByteStream.
