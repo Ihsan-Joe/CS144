@@ -58,14 +58,21 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
         m_next_index += data.size();
 
         output.push(std::move(data));
-        clearup_buffer();
-        continue_push(output);
+        
+        auto it = m_buffer.upper_bound(m_next_index);
+        
+
+
+        // clearup_buffer();
+        // continue_push(output);
         
     }
 
     else if (first_index > m_next_index)
     {
-
+        auto it = m_buffer.upper_bound(m_next_index);
+        auto pre_package = --it;
+        // 如果pre.index + pre.data.size() > m_next_index，那么就不需要处理last
     }
 
     else if (first_index == m_pre_index && data.size() > m_pre_size)
