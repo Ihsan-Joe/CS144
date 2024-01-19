@@ -19,7 +19,7 @@ private:
     bool m_is_last_substring{false};
 
     bool garbage_package(uint64_t first_index, uint64_t data_size, uint64_t available_capacity) const;
-    bool organize(uint64_t first_index, std::string &data);
+    void organize(uint64_t first_index, std::string &data);
     void send(Writer &writer);
     void try_close(Writer &writer) const;
 public:
