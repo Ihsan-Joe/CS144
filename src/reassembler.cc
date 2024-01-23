@@ -71,7 +71,7 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
         {
             data.erase(output.available_capacity());
         }
-        direct_push(first_index + data.size(), data, output);
+        direct_push(m_next_index + data.size(), data, output);
     }
 
     // first_index < m_next_index
@@ -82,83 +82,87 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
         {
             data.erase(output.available_capacity());
         }
-        direct_push(data.size(), data, output);
+        direct_push(m_next_index + data.size(), data, output);
     }
     try_close(output);
 }
 
-void Reassembler::handle_package_end(uint64_t end_position,
-                                     std::map<uint64_t, std::string>::iterator first_index_position)
-{
-    for (auto end_it = first_index_position; end_it != m_buffer.end(); end_it++)
-    {
-        // if (end_it->first >= end_position)
-        // {
-        //     return;
-        // }
-
-        if (end_it->first + end_it->second.size() > end_position)
-        {
-            end_it->second.substr(end_position - end_it->first);
-        }
-
-        if (end_it->first + end_it->second.size() < end_position)
-        {
-            m_buffer.erase(end_it);
-        }
-
-        if (end_it == std::prev(m_buffer.end()))
-        {
-            return;
-        }
-
-        m_buffer.erase(end_it);
-    }
-}
-
 void Reassembler::save_the_buffer(uint64_t first_index, std::string &data)
 {
-    for (auto start_it = m_buffer.begin(); start_it != m_buffer.end(); start_it++)
+    auto it_front = m_buffer.lower_bound(first_index);
+    auto it_last = m_buffer.lower_bound(first_index + data.size());
+
+    if (it_front != m_buffer.end())
     {
-        // 找出first_index放置位置
-        if (first_index < start_it->first)
+        if (m_buffer.size() != 1 && first_index == it_front->first)
         {
-            if (start_it != m_buffer.begin())
-            {
-                start_it--;
-            }
-            handle_package_end(first_index + data.size(), start_it);
-            m_buffer.insert({first_index, std::move(data)});
+            m_buffer.erase(std::next(it_front), handle_package_overlap(it_last, first_index, data));
+            it_front->second.replace(0, data.size(), data);
             return;
         }
-
-        if (first_index == start_it->first)
+        
+        if (m_buffer.size() == 1 && first_index == it_front->first)
         {
-            // 如果在一个package里面
-            if (start_it->first + start_it->second.size() > first_index + data.size())
-            {
-                start_it->second.replace(first_index, data.size(), data);
-                return;
-            }
-            handle_package_end(first_index + data.size(), start_it);
-            start_it->second = move(data);
-            return;
-        }
-
-        if (first_index < start_it->first + start_it->second.size())
-        {
-            start_it->second.erase(first_index - start_it->first);
-            handle_package_end(first_index + data.size(), start_it);
-            m_buffer.insert({first_index, std::move(data)});
-            return;
-        }
-
-        if (start_it == std::prev(m_buffer.end()))
-        {
-            m_buffer.insert({first_index, std::move(data)});
+            it_front->second.replace(0, data.size(), data);
             return;
         }
     }
+
+    if (it_front == m_buffer.begin())
+    {
+        if (first_index < it_front->first)
+        {
+            m_buffer.erase(it_front, handle_package_overlap(it_last, first_index, data));
+            m_buffer.insert({first_index, data});
+            return;
+        }
+    }
+    // 如果是最靠前的元素
+    else
+    {
+        --it_front;
+        if (first_index >= it_front->first + it_front->second.size())
+        {
+            m_buffer.erase(std::next(it_front), handle_package_overlap(it_last, first_index, data));
+            m_buffer.insert({first_index, data});
+            return;
+        }
+    }
+
+    if (first_index + data.size() >= it_front->first + it_front->second.size())
+    {
+        it_front->second.erase(first_index - it_front->first);
+        m_buffer.erase(std::next(it_front), handle_package_overlap(it_last, first_index, data));
+        m_buffer.insert({first_index, data});
+        return;
+    }
+    it_front->second.replace(first_index - it_front->first, data.size(), data);
+}
+
+my_map::iterator Reassembler::handle_package_overlap(my_map::iterator it_last, uint64_t first_index, std::string &data)
+{
+    if (it_last == m_buffer.begin())
+    {
+        return it_last;
+    }
+
+    if (it_last != m_buffer.end())
+    {
+        if (first_index + data.size() == it_last->first)
+        {
+            return it_last;
+        }
+    }
+
+    // if (first_index + data.size() < it_last->first)
+    --it_last;
+    if (first_index + data.size() >= it_last->first + it_last->second.size())
+    {
+        return std::next(it_last);
+    }
+    // if (first_index + data.size() < it_last->first + it_last->second.size())
+    m_buffer.insert({first_index + data.size(), it_last->second.substr(first_index + data.size() - it_last->first)});
+    return m_buffer.find(first_index + data.size());
 }
 
 void Reassembler::direct_push(uint64_t end_position, std::string &data, Writer &writer)
@@ -182,7 +186,7 @@ void Reassembler::direct_push(uint64_t end_position, std::string &data, Writer &
         send(data, writer);
         return;
     }
-
+    // if (it->first < end_position)
     // 跟前一个package有重叠
     it--;
     if (it->first + it->second.size() > end_position)

@@ -6,16 +6,18 @@
 #include <map>
 #include <string>
 
+using my_map = std::map<uint64_t, std::string>;
+
 class Reassembler
 {
 private:
-    std::map<uint64_t, std::string> m_buffer{};
+    my_map m_buffer{};
     uint64_t m_next_index{0};
     bool m_is_last_substring{false};
 
     void organize(uint64_t first_index, std::string &data, Writer &write);
     void save_the_buffer(uint64_t first_index, std::string &data);
-    void handle_package_end(uint64_t end_position, std::map<uint64_t, std::string>::iterator first_index_position);
+    my_map::iterator handle_package_overlap(my_map::iterator it_last, uint64_t first_index, std::string &data);
     void direct_push(uint64_t end_position, std::string &data, Writer &writer);
     void send(std::string &data, Writer &writer);
     void try_close(Writer &writer) const;
