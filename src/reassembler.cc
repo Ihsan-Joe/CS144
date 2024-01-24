@@ -2,7 +2,6 @@
 #include "byte_stream.hh"
 #include <cstdint>
 #include <iterator>
-#include <map>
 #include <netinet/in.h>
 #include <string>
 
