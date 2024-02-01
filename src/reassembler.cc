@@ -17,7 +17,7 @@ void Reassembler::try_close(Writer &writer) const
 uint64_t Reassembler::bytes_pending() const
 {
     uint64_t count = 0;
-    for (auto [key, value] : m_buffer)
+    for (const auto& [key, value] : m_buffer)
     {
         count += value.size();
     }
