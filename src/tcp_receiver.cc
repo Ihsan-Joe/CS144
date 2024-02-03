@@ -2,7 +2,6 @@
 #include "tcp_receiver_message.hh"
 #include "wrapping_integers.hh"
 #include <cstdint>
-#include <iostream>
 #include <optional>
 
 using namespace std;
@@ -33,18 +32,12 @@ TCPReceiverMessage TCPReceiver::send(const Writer &inbound_stream) const
     // (void)inbound_stream;
     // return{};
     TCPReceiverMessage message;
-    message.window_size = inbound_stream.available_capacity();
-    ;
+    uint64_t capacity = inbound_stream.available_capacity();
+    message.window_size = (capacity <= UINT16_MAX) ? static_cast<uint16_t>(capacity) : UINT16_MAX;
     if (m_start_to_accept)
     {
-        if (inbound_stream.is_closed())
-        {
-            message.ackno = m_zero_point + 2;
-        }
-        else
-        {
-            message.ackno = m_zero_point + 1;
-        }
+        message.ackno = inbound_stream.is_closed() ? m_zero_point + 2 + inbound_stream.bytes_pushed()
+                                                   : m_zero_point + 1 + inbound_stream.bytes_pushed();
     }
     return message;
 }

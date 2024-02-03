@@ -58,6 +58,7 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
         if (m_buffer.empty())
         {
             m_buffer.insert({first_index, data});
+            try_close(output);
             return;
         }
         save_the_buffer(first_index, data);
