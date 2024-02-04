@@ -12,6 +12,8 @@ private:
     bool m_is_last_substring{false};
     // 缓冲区
     std::string m_buffer{};
+    // 缓冲区维护数组
+    std::string m_bool_buffer{};
     // 下一个first_index应该取的值
     uint64_t m_next_index{0};
     // 上一个发送过去的data package的index

@@ -7,10 +7,10 @@ using namespace std;
 
 void Reassembler::send(Writer &output)
 {
-    while (!m_buffer.empty() && m_buffer[0] != '\0')
+    while (!m_bool_buffer.empty() && m_bool_buffer[0] != '\0')
     {
         // 找到此次发送的字符串的结束位置
-        auto end_index = m_buffer.find('\0', 0);
+        auto end_index = m_bool_buffer.find('\0', 0);
         if (end_index == std::string::npos)
         {
             end_index = m_buffer.size();
@@ -23,6 +23,7 @@ void Reassembler::send(Writer &output)
 
         // 缩减缓冲区
         m_buffer = m_buffer.substr(end_index);
+        m_bool_buffer = m_bool_buffer.substr(end_index);
 
         // 给next_index加上此次发送的字符串大小，为准备下一次发送
         m_next_index += end_index;
@@ -53,6 +54,7 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
     }
 
     m_buffer.resize(available_capacity);
+    m_bool_buffer.resize(available_capacity);
 
     if (first_index == m_next_index)
     {
@@ -67,6 +69,7 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
         }
 
         m_buffer.replace(0, data.size(), data);
+        m_bool_buffer.replace(0, data.size(), data.size(), '1');
         send(output);
     }
     else if (first_index > m_next_index)
@@ -79,6 +82,7 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
             data.erase(available_capacity - insert_position);
         }
         m_buffer.replace(insert_position, data.size(), data);
+        m_bool_buffer.replace(insert_position, data.size(), data.size(), '1');
     }
     else
     {
@@ -92,6 +96,7 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
                 data.erase(available_capacity);
             }
             m_buffer.replace(0, data.size(), data);
+            m_bool_buffer.replace(0, data.size(), data.size(), '1');
             send(output);
         }
     }
@@ -105,5 +110,5 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
 
 uint64_t Reassembler::bytes_pending() const
 {
-    return m_buffer.size() - std::count(m_buffer.begin(), m_buffer.end(), '\0');
+    return m_bool_buffer.size() - std::count(m_bool_buffer.begin(), m_bool_buffer.end(), '\0');
 }
