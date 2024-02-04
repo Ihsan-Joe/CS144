@@ -22,7 +22,7 @@ void TCPReceiver::receive(TCPSenderMessage message, Reassembler &reassembler, Wr
     }
     uint64_t abs_seqno = message.seqno.unwrap(m_zero_point, m_checkpoint);
     // 加上message.SYN是因为它会占用一个byte
-    uint64_t first_index = abs_seqno - 1 + message.SYN + message.FIN;
+    uint64_t first_index = abs_seqno - 1 + message.SYN;
     reassembler.insert(first_index, std::move(message.payload), message.FIN, inbound_stream);
     send(inbound_stream);
 }
