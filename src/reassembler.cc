@@ -1,222 +1,114 @@
 #include "reassembler.hh"
-#include "byte_stream.hh"
+#include <algorithm>
 #include <cstdint>
-#include <iterator>
 #include <netinet/in.h>
-#include <string>
 
 using namespace std;
-void Reassembler::try_close(Writer &writer) const
+
+void Reassembler::send(Writer &output)
 {
-    if (m_is_last_substring && m_buffer.empty())
+    while (!m_bool_buffer.empty() && m_bool_buffer[0] != '\0')
     {
-        writer.close();
+        // 找到此次发送的字符串的结束位置
+        auto end_index = m_bool_buffer.find('\0', 0);
+        if (end_index == std::string::npos)
+        {
+            end_index = m_buffer.size();
+        }
+        // 发送
+        output.push(m_buffer.substr(0, end_index));
+        // 存储这次发送的信息
+        m_pre_index = m_next_index;
+        m_pre_data_size = end_index - m_next_index;
+
+        // 缩减缓冲区
+        m_buffer = m_buffer.substr(end_index);
+        m_bool_buffer = m_bool_buffer.substr(end_index);
+
+        // 给next_index加上此次发送的字符串大小，为准备下一次发送
+        m_next_index += end_index;
     }
 }
 
-uint64_t Reassembler::bytes_pending() const
+void Reassembler::try_close(Writer &output, bool is_last_substring)
 {
-    uint64_t count = 0;
-    for (const auto& [key, value] : m_buffer)
+    if (is_last_substring)
     {
-        count += value.size();
+        m_is_last_substring = true;
     }
-    return count;
+
+    if (m_is_last_substring && bytes_pending() == 0)
+    {
+        output.close();
+    }
 }
 
 void Reassembler::insert(uint64_t first_index, string data, bool is_last_substring, Writer &output)
 {
-
-    m_is_last_substring = m_is_last_substring ? m_is_last_substring : is_last_substring;
-    // 只有有空间的时候才可以进行其他操作
-
-    if (!output.available_capacity())
+    auto available_capacity = output.available_capacity();
+    // log(func_calld, data);
+    if (first_index > m_next_index && first_index - m_next_index > available_capacity)
     {
-        try_close(output);
+        try_close(output, is_last_substring);
         return;
     }
 
-    if (first_index > m_next_index)
+    m_buffer.resize(available_capacity);
+    m_bool_buffer.resize(available_capacity);
+
+    if (first_index == m_next_index)
     {
-        // 存储index大于当前的有效缓冲区
-        if (first_index - m_next_index > output.available_capacity())
+        // 存储这次发送的package的信息
+        m_pre_data_size = data.size();
+        m_pre_index = first_index;
+
+        // 去除比m_buffer.size多出来的部分
+        if (data.size() > available_capacity)
         {
-            try_close(output);
-            return;
-        }
-        if (data.size() + (first_index - m_next_index) > output.available_capacity())
-        {
-            data.erase(m_next_index + output.available_capacity() - first_index);
+            data.erase(available_capacity);
         }
 
-        if (data.empty())
-        {
-            try_close(output);
-            return;
-        }
-
-        if (m_buffer.empty())
-        {
-            m_buffer.insert({first_index, data});
-            try_close(output);
-            return;
-        }
-        save_the_buffer(first_index, data);
+        m_buffer.replace(0, data.size(), data);
+        m_bool_buffer.replace(0, data.size(), data.size(), '1');
+        send(output);
     }
-
-    else if (first_index == m_next_index)
+    else if (first_index > m_next_index)
     {
-        // 对数据进行裁剪，取能装下缓冲区的数据
-        if (data.size() > output.available_capacity())
+        // 因为缓冲区的第0个坐标就是m_next_index
+        auto insert_position = first_index - m_next_index;
+        if (data.size() > available_capacity - insert_position)
         {
-            data.erase(output.available_capacity());
+            // 删除比缓冲区大小多出来的那部分
+            data.erase(available_capacity - insert_position);
         }
-        direct_push(m_next_index + data.size(), data, output);
+        m_buffer.replace(insert_position, data.size(), data);
+        m_bool_buffer.replace(insert_position, data.size(), data.size(), '1');
     }
-
-    // first_index < m_next_index
-    else if (first_index + data.size() > m_next_index)
-    {
-        data = data.substr(m_next_index - first_index);
-        if (data.size() > output.available_capacity())
-        {
-            data.erase(output.available_capacity());
-        }
-        direct_push(m_next_index + data.size(), data, output);
-    }
-    try_close(output);
-}
-
-void Reassembler::save_the_buffer(uint64_t first_index, std::string &data)
-{
-    auto it_front = m_buffer.lower_bound(first_index);
-    auto it_last = m_buffer.lower_bound(first_index + data.size());
-
-    if (it_front != m_buffer.end())
-    {
-        if (m_buffer.size() != 1 && first_index == it_front->first)
-        {
-            m_buffer.erase(std::next(it_front), handle_package_overlap(it_last, first_index, data));
-            it_front->second.replace(0, data.size(), data);
-            return;
-        }
-        
-        if (m_buffer.size() == 1 && first_index == it_front->first)
-        {
-            it_front->second.replace(0, data.size(), data);
-            return;
-        }
-    }
-
-    if (it_front == m_buffer.begin())
-    {
-        if (first_index < it_front->first)
-        {
-            m_buffer.erase(it_front, handle_package_overlap(it_last, first_index, data));
-            m_buffer.insert({first_index, data});
-            return;
-        }
-    }
-    // 如果是最靠前的元素
     else
     {
-        --it_front;
-        if (first_index >= it_front->first + it_front->second.size())
+        if (first_index + data.size() > m_next_index)
         {
-            m_buffer.erase(std::next(it_front), handle_package_overlap(it_last, first_index, data));
-            m_buffer.insert({first_index, data});
-            return;
+            // 去掉前面已经push过的内容
+            data = data.substr(m_next_index - first_index);
+            // 去掉后面超过
+            if (data.size() > available_capacity)
+            {
+                data.erase(available_capacity);
+            }
+            m_buffer.replace(0, data.size(), data);
+            m_bool_buffer.replace(0, data.size(), data.size(), '1');
+            send(output);
         }
     }
 
-    if (first_index + data.size() >= it_front->first + it_front->second.size())
-    {
-        it_front->second.erase(first_index - it_front->first);
-        m_buffer.erase(std::next(it_front), handle_package_overlap(it_last, first_index, data));
-        m_buffer.insert({first_index, data});
-        return;
-    }
-    it_front->second.replace(first_index - it_front->first, data.size(), data);
+    try_close(output, is_last_substring);
+
+    // 剩下的有: 这两种情况直接丢弃
+    // first_index < m_next_index && first_index + data.size() < m_next_index
+    // first_index < m_next_index && first_index + data.size() == m_next_index
 }
 
-my_map::iterator Reassembler::handle_package_overlap(my_map::iterator it_last, uint64_t first_index, std::string &data)
+uint64_t Reassembler::bytes_pending() const
 {
-    if (it_last == m_buffer.begin())
-    {
-        return it_last;
-    }
-
-    if (it_last != m_buffer.end())
-    {
-        if (first_index + data.size() == it_last->first)
-        {
-            return it_last;
-        }
-    }
-
-    // if (first_index + data.size() < it_last->first)
-    --it_last;
-    if (first_index + data.size() >= it_last->first + it_last->second.size())
-    {
-        return std::next(it_last);
-    }
-    // if (first_index + data.size() < it_last->first + it_last->second.size())
-    m_buffer.insert({first_index + data.size(), it_last->second.substr(first_index + data.size() - it_last->first)});
-    return m_buffer.find(first_index + data.size());
-}
-
-void Reassembler::direct_push(uint64_t end_position, std::string &data, Writer &writer)
-{
-
-    // lower_bound 只返回等于或者大于的元素，因此，下面不对it->first < end_position做判断
-    auto it = m_buffer.lower_bound(end_position);
-
-    // 没跟package冲突
-    if (it == m_buffer.begin())
-    {
-        send(data, writer);
-        return;
-    }
-
-    // 之前的全是覆盖，没重叠
-    if (it->first == end_position)
-    {
-        // it--;
-        m_buffer.erase(m_buffer.begin(), it);
-        send(data, writer);
-        return;
-    }
-    // if (it->first < end_position)
-    // 跟前一个package有重叠
-    it--;
-    if (it->first + it->second.size() > end_position)
-    {
-        // 没重叠的字符串加到data后面
-        data += it->second.substr(end_position - it->first);
-        // 一块删除有重叠的package
-        m_buffer.erase(m_buffer.begin(), std::next(it));
-        send(data, writer);
-        return;
-    }
-
-    // it->first + it->second <= end_position
-    m_buffer.erase(m_buffer.begin(), std::next(it));
-    send(data, writer);
-}
-
-void Reassembler::send(std::string &data, Writer &writer)
-{
-    m_next_index += data.size();
-    writer.push(data);
-    while (!m_buffer.empty())
-    {
-        auto begin = m_buffer.begin();
-        if (begin->first != m_next_index)
-        {
-            break;
-        }
-        writer.push(begin->second);
-        m_next_index += begin->second.size();
-        m_buffer.erase(begin);
-    }
+    return m_bool_buffer.size() - std::count(m_bool_buffer.begin(), m_bool_buffer.end(), '\0');
 }

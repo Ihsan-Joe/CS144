@@ -3,25 +3,30 @@
 #include "byte_stream.hh"
 
 #include <cstdint>
-#include <map>
 #include <string>
-
-using my_map = std::map<uint64_t, std::string>;
 
 class Reassembler
 {
 private:
-    my_map m_buffer{};
-    uint64_t m_next_index{0};
+    // 是不是最后一个字符串
     bool m_is_last_substring{false};
+    // 缓冲区
+    std::string m_buffer{};
+    // 缓冲区维护数组
+    std::string m_bool_buffer{};
+    // 下一个first_index应该取的值
+    uint64_t m_next_index{0};
+    // 上一个发送过去的data package的index
+    uint64_t m_pre_index{0};
+    // 上一个发送过去的data package的data size
+    uint64_t m_pre_data_size{0};
+    
+    // 用于测试,函数总调用
+    uint64_t func_calld{0};
+    
 
-    void organize(uint64_t first_index, std::string &data, Writer &write);
-    void save_the_buffer(uint64_t first_index, std::string &data);
-    my_map::iterator handle_package_overlap(my_map::iterator it_last, uint64_t first_index, std::string &data);
-    void direct_push(uint64_t end_position, std::string &data, Writer &writer);
-    void send(std::string &data, Writer &writer);
-    void try_close(Writer &writer) const;
-
+    void send(Writer &output);
+    void try_close(Writer &output, bool is_last_substring);
 public:
     /*
      * Insert a new substring to be reassembled into a ByteStream.
