@@ -9,6 +9,20 @@
 class Reassembler
 {
 private:
+    std::vector<char> m_buffer{};
+    std::vector<bool> m_bool_buffer{};
+    uint64_t m_loop_begin{0};
+    uint64_t m_loop_end{0};
+    bool m_is_full{false};
+    bool m_is_empty{true};
+
+    bool initialized{false};
+
+    bool m_is_recive_FIN{false};
+
+
+    bool save_the_buffer(std::string &data, uint64_t begin_index, uint64_t end_index);
+    bool push(Writer &output);
 
 public:
     /*
