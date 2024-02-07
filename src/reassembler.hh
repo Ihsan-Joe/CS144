@@ -9,9 +9,7 @@
 class Reassembler
 {
 private:
-    uint64_t m_next_currect_index {0};
-    uint64_t m_rasmblr_buf_cur_data_num {0};
-    std::unordered_map<uint64_t, std::string> m_rasmblr_buffer;
+
 public:
     /*
      * Insert a new substring to be reassembled into a ByteStream.
