@@ -2,7 +2,9 @@
 
 #include "byte_stream.hh"
 
+#include <chrono>
 #include <cstdint>
+#include <iostream>
 #include <string>
 #include <unordered_map>
 
@@ -11,11 +13,34 @@ class Reassembler
 private:
     std::vector<char> m_buffer{};
     std::vector<bool> m_bool_buffer{};
-    // bool initialized{false};
     bool m_is_recive_FIN{false};
 
     void save_the_buffer(const std::string &data, uint64_t begin_index);
     void push(Writer &output, uint64_t first_unassemble);
+
+private:
+    // 其他成员变量声明...
+    std::chrono::steady_clock::time_point start_time{}; // 计时器开始时间点
+
+    // 开始计时
+    void start_timer() {
+        start_time = std::chrono::steady_clock::now();
+    }
+
+    // 结束计时，并返回经过的时间（毫秒）
+    double end_timer() {
+        auto end_time = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        return duration.count(); // 返回执行时间，单位为毫秒
+    }
+
+    // 输出执行时间
+    void print_execution_time(double milliseconds, const std::string &message) {
+        std::cerr << message << "Execution time: " << milliseconds << " ms" << std::endl;
+    }
+
+    // 其他私有成员函数...
+
 
 public:
     /*

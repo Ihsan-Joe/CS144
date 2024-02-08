@@ -73,12 +73,13 @@ void Reassembler::save_the_buffer(const std::string &data, const uint64_t begin_
 
 void Reassembler::push(Writer &output, const uint64_t first_unassemble)
 {
+    start_timer();
     uint64_t absolute_index = first_unassemble % m_bool_buffer.size();
     // 数组为空，直接返回
-    if (!bytes_pending())
-    {
-        return;
-    }
+    // if (!bytes_pending())
+    // {
+    //     return;
+    // }
     uint64_t count = absolute_index;
     bool around = false;
     while (m_bool_buffer[count])
@@ -109,9 +110,18 @@ void Reassembler::push(Writer &output, const uint64_t first_unassemble)
         std::fill(m_bool_buffer.begin() + absolute_index, m_bool_buffer.begin() + count, false);
         output.push(std::move(copied_str));
     }
+    print_execution_time(end_timer(), "push - while() : ");
 }
 
 uint64_t Reassembler::bytes_pending() const
 {
-    return std::count(m_bool_buffer.begin(), m_bool_buffer.end(), true);
+    uint64_t count = 0;
+    for (const bool item : m_bool_buffer)
+    {
+        if (item)
+        {
+            count++;
+        }
+    }
+    return count;
 }
