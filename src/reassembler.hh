@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class Reassembler
 {
@@ -14,19 +15,8 @@ private:
     std::string m_buffer{};
     // 缓冲区维护数组
     std::string m_bool_buffer{};
-    // 下一个first_index应该取的值
-    uint64_t m_next_index{0};
-    // 上一个发送过去的data package的index
-    uint64_t m_pre_index{0};
-    // 上一个发送过去的data package的data size
-    uint64_t m_pre_data_size{0};
-    
-    // 用于测试,函数总调用
-    uint64_t func_calld{0};
-    
-
-    void send(Writer &output);
-    void try_close(Writer &output, bool is_last_substring);
+    // std::vector<bool> m_bool_buffer{};
+    void try_close(Writer &output) const;
 public:
     /*
      * Insert a new substring to be reassembled into a ByteStream.

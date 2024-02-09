@@ -1,43 +1,17 @@
 #include "reassembler.hh"
+#include "byte_stream.hh"
 #include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <netinet/in.h>
+#include <string>
+#include <utility>
 
 using namespace std;
 
-void Reassembler::send(Writer &output)
+void Reassembler::try_close(Writer &output) const
 {
-    while (!m_bool_buffer.empty() && m_bool_buffer[0] != '\0')
-    {
-        // 找到此次发送的字符串的结束位置
-        auto end_index = m_bool_buffer.find('\0', 0);
-        if (end_index == std::string::npos)
-        {
-            end_index = m_buffer.size();
-        }
-        // 发送
-        output.push(m_buffer.substr(0, end_index));
-        // 存储这次发送的信息
-        m_pre_index = m_next_index;
-        m_pre_data_size = end_index - m_next_index;
-
-        // 缩减缓冲区
-        m_buffer = m_buffer.substr(end_index);
-        m_bool_buffer = m_bool_buffer.substr(end_index);
-
-        // 给next_index加上此次发送的字符串大小，为准备下一次发送
-        m_next_index += end_index;
-    }
-}
-
-void Reassembler::try_close(Writer &output, bool is_last_substring)
-{
-    if (is_last_substring)
-    {
-        m_is_last_substring = true;
-    }
-
-    if (m_is_last_substring && bytes_pending() == 0)
+    if (m_is_last_substring && !bytes_pending())
     {
         output.close();
     }
@@ -45,70 +19,59 @@ void Reassembler::try_close(Writer &output, bool is_last_substring)
 
 void Reassembler::insert(uint64_t first_index, string data, bool is_last_substring, Writer &output)
 {
-    auto available_capacity = output.available_capacity();
-    // log(func_calld, data);
-    if (first_index > m_next_index && first_index - m_next_index > available_capacity)
+    m_is_last_substring |= is_last_substring;
+    const uint64_t first_unassemble = output.bytes_pushed();
+    const uint64_t first_unacceptable = output.available_capacity() + first_unassemble;
+    if (first_unassemble == first_unacceptable || first_index >= first_unacceptable ||
+        first_index + data.size() <= first_unassemble)
     {
-        try_close(output, is_last_substring);
+        try_close(output);
         return;
     }
 
-    m_buffer.resize(available_capacity);
-    m_bool_buffer.resize(available_capacity);
-
-    if (first_index == m_next_index)
+    uint64_t begin_index = first_index - first_unassemble;
+    if (first_index < first_unassemble)
     {
-        // 存储这次发送的package的信息
-        m_pre_data_size = data.size();
-        m_pre_index = first_index;
-
-        // 去除比m_buffer.size多出来的部分
-        if (data.size() > available_capacity)
-        {
-            data.erase(available_capacity);
-        }
-
-        m_buffer.replace(0, data.size(), data);
-        m_bool_buffer.replace(0, data.size(), data.size(), '1');
-        send(output);
-    }
-    else if (first_index > m_next_index)
-    {
-        // 因为缓冲区的第0个坐标就是m_next_index
-        auto insert_position = first_index - m_next_index;
-        if (data.size() > available_capacity - insert_position)
-        {
-            // 删除比缓冲区大小多出来的那部分
-            data.erase(available_capacity - insert_position);
-        }
-        m_buffer.replace(insert_position, data.size(), data);
-        m_bool_buffer.replace(insert_position, data.size(), data.size(), '1');
-    }
-    else
-    {
-        if (first_index + data.size() > m_next_index)
-        {
-            // 去掉前面已经push过的内容
-            data = data.substr(m_next_index - first_index);
-            // 去掉后面超过
-            if (data.size() > available_capacity)
-            {
-                data.erase(available_capacity);
-            }
-            m_buffer.replace(0, data.size(), data);
-            m_bool_buffer.replace(0, data.size(), data.size(), '1');
-            send(output);
-        }
+        begin_index = 0;
+        data = data.substr(first_unassemble - first_index);
     }
 
-    try_close(output, is_last_substring);
+    if (begin_index + data.size() > first_unacceptable - first_unassemble)
+    {
+        data.erase(first_unacceptable - first_unassemble - begin_index);
+    }
 
-    // 剩下的有: 这两种情况直接丢弃
-    // first_index < m_next_index && first_index + data.size() < m_next_index
-    // first_index < m_next_index && first_index + data.size() == m_next_index
+    if (first_unacceptable - first_unassemble > m_bool_buffer.size())
+    {
+        m_buffer.resize(first_unacceptable - first_unassemble, '\0');
+        m_bool_buffer.resize(first_unacceptable - first_unassemble, false);
+    }
+
+    m_buffer.replace(begin_index, data.size(), data);
+    m_bool_buffer.replace(begin_index, data.size(), data.size(), true);
+
+    // if (!m_bool_buffer[0]) {return;} //这样会减少不少时间，也会通过测试，但是不能直接return
+    if (m_bool_buffer[0])
+    {
+        uint64_t distance = m_bool_buffer.find(false, 0);
+        distance = (distance != std::string::npos) ? distance : m_bool_buffer.size();
+        output.push(m_buffer.substr(0, distance));
+        m_bool_buffer.erase(m_bool_buffer.begin(), m_bool_buffer.begin() + distance);
+        m_buffer.erase(m_buffer.begin(), m_buffer.begin() + distance);
+    }
+    try_close(output);
 }
 
 uint64_t Reassembler::bytes_pending() const
 {
-    return m_bool_buffer.size() - std::count(m_bool_buffer.begin(), m_bool_buffer.end(), '\0');
+    uint64_t count = 0;
+    for (const auto item : m_bool_buffer)
+    {
+        if (item)
+        {
+            count++;
+        }
+    }
+    return count;
+    // return std::count(m_bool_buffer.begin(), m_bool_buffer.end(), true); // 这个速度较慢
 }
