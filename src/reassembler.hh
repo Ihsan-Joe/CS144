@@ -15,7 +15,7 @@ private:
     std::string m_buffer{};
     // 缓冲区维护数组
     std::string m_bool_buffer{};
-    // std::vector<bool> m_bool_buffer{};
+    // std::vector<char> m_bool_buffer{};
     void try_close(Writer &output) const;
 public:
     /*

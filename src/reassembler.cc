@@ -1,11 +1,8 @@
 #include "reassembler.hh"
 #include "byte_stream.hh"
-#include <algorithm>
 #include <cstdint>
-#include <iterator>
 #include <netinet/in.h>
 #include <string>
-#include <utility>
 
 using namespace std;
 
@@ -49,12 +46,19 @@ void Reassembler::insert(uint64_t first_index, string data, bool is_last_substri
 
     m_buffer.replace(begin_index, data.size(), data);
     m_bool_buffer.replace(begin_index, data.size(), data.size(), true);
+    // std::fill(m_bool_buffer.begin() + begin_index, m_bool_buffer.begin() + (begin_index + data.size()), true);
 
     // if (!m_bool_buffer[0]) {return;} //这样会减少不少时间，也会通过测试，但是不能直接return
     if (m_bool_buffer[0])
     {
+        // 用string时找distance的方法
         uint64_t distance = m_bool_buffer.find(false, 0);
         distance = (distance != std::string::npos) ? distance : m_bool_buffer.size();
+
+        // 用vector<char>找distance方法
+        // auto it = std::find(m_bool_buffer.begin(), m_bool_buffer.end(), false);
+        // uint64_t distance = std::distance(m_bool_buffer.begin(), it);
+
         output.push(m_buffer.substr(0, distance));
         m_bool_buffer.erase(m_bool_buffer.begin(), m_bool_buffer.begin() + distance);
         m_buffer.erase(m_buffer.begin(), m_buffer.begin() + distance);
