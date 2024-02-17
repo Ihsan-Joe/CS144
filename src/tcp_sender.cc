@@ -22,12 +22,7 @@ TCPSender::TCPSender(uint64_t initial_RTO_ms, optional<Wrap32> fixed_isn)
 
 uint64_t TCPSender::sequence_numbers_in_flight() const
 {
-    uint64_t count = 0;
-    for (const auto &[ab_seqno, segment] : m_outstanding)
-    {
-        count += segment.sequence_length();
-    }
-    return count;
+    return m_next_seq - m_ackno;
 }
 
 uint64_t TCPSender::consecutive_retransmissions() const
@@ -38,120 +33,103 @@ uint64_t TCPSender::consecutive_retransmissions() const
 
 optional<TCPSenderMessage> TCPSender::maybe_send()
 {
-    m_timer_start = true;
-    if (!m_start_send)
+    if (m_SYN && !m_need_send.empty())
     {
-        TCPSenderMessage msg;
-        msg.seqno = Wrap32::wrap(m_ab_seqno, isn_);
-        msg.SYN = m_syn = true;
-        m_ab_seqno++;
-        m_outstanding.push_front({m_ab_seqno, msg});
-        m_start_send = true;
-        return msg;
-    }
-    if (!m_need_send.empty())
-    {
-        m_outstanding.push_front({m_need_send.front().seqno.unwrap(isn_, m_ab_seqno), m_need_send.front()});
-        m_ab_seqno += m_need_send.front().sequence_length();
+        if (!m_timer_start)
+        {
+            m_timer_start = true;
+            m_remaining_RTO_ms = m_refrence_time = initial_RTO_ms_;
+        }
+        auto msg = m_need_send.front();
+        m_outstanding.push(msg);
         m_need_send.pop();
-        return m_outstanding.front().second;
+        return msg;
     }
     return {};
 }
 
 void TCPSender::push(Reader &outbound_stream)
 {
-    if (!outbound_stream.bytes_buffered())
+    if (m_FIN)
     {
         return;
     }
-    auto segment_size = outbound_stream.bytes_buffered();
-    TCPSenderMessage msg;
-    if (!m_syn)
+    uint64_t remaining_window_size = std::max(m_window, static_cast<uint16_t>(1)) - (m_next_seq - m_ackno);
+    while (remaining_window_size && !m_FIN)
     {
-        m_ab_seqno = 0;
-        msg.SYN = m_syn = true;
-        segment_size++;
-    }
-    segment_size = outbound_stream.is_finished() ? segment_size + 1 : segment_size; // 加不加FIN
-
-    uint64_t seqno = m_ab_seqno;
-    uint64_t mod = std::min(std::min(TCPConfig::MAX_PAYLOAD_SIZE, static_cast<uint64_t>(m_window)), segment_size);
-    
-    if (mod == segment_size) // 如果字符串可以一次性发过去
-    {
-        read(outbound_stream, segment_size, msg.payload);
-        outbound_stream.pop(segment_size);
-        msg.seqno = Wrap32::wrap(seqno, isn_);
-        msg.FIN = outbound_stream.is_finished();
+        TCPSenderMessage msg;
+        msg.seqno = Wrap32::wrap(m_next_seq, isn_);
+        read(outbound_stream, std::min(remaining_window_size, TCPConfig::MAX_PAYLOAD_SIZE), msg.payload);
+        remaining_window_size -= msg.payload.size();
+        if (!m_SYN)
+        {
+            m_SYN = msg.SYN = true;
+        }
+        if (!m_FIN && outbound_stream.is_finished() && remaining_window_size)
+        {
+            m_FIN = msg.FIN = true;
+        }
+        if (!msg.sequence_length())
+        {
+            return;
+        }
         m_need_send.push(msg);
-        return;
+        m_next_seq += msg.sequence_length();
     }
-
-    auto quotient = segment_size / mod;
-    for (size_t i = 1; i <= quotient; i++)
-    {
-        msg.seqno = Wrap32::wrap(seqno, isn_);
-        read(outbound_stream, mod, msg.payload);
-        outbound_stream.pop(mod);
-        m_need_send.push(msg);
-        // m_outstanding.push_front({m_need_send.front().seqno.unwrap(isn_, m_ab_seqno), m_need_send.front()});
-        seqno += msg.sequence_length();
-    }
-    auto remainder = segment_size % mod;
-    if (remainder)
-    {
-        read(outbound_stream, remainder, msg.payload);
-        outbound_stream.pop(remainder);
-    }
-    else
-    {
-        msg.payload = static_cast<string>("");
-    }
-    msg.seqno = Wrap32::wrap(seqno, isn_);
-    msg.FIN = outbound_stream.is_finished();
-    m_need_send.push(msg);
-    // m_outstanding.push_front({m_need_send.front().seqno.unwrap(isn_, m_ab_seqno), m_need_send.front()});
 }
 
 TCPSenderMessage TCPSender::send_empty_message() const
 {
-    // Your code here.
     TCPSenderMessage msg;
-    msg.seqno = Wrap32::wrap(m_ab_seqno, isn_);
+    msg.seqno = Wrap32::wrap(m_next_seq, isn_);
     return msg;
 }
 
 // 设置window大小，从m_outstanding中剔除msg.ackno的报文
 void TCPSender::receive(const TCPReceiverMessage &msg)
 {
-    m_window = msg.window_size ? msg.window_size : 1;
-
+    m_consecutive_retransmissions = 0;
     if (!msg.ackno.has_value())
     {
         return;
     }
-
-    while (msg.ackno.value().unwrap(isn_, m_ab_seqno) >= m_outstanding.front().first)
+    auto recv_ackno = msg.ackno->unwrap(isn_, m_ackno);
+    if (recv_ackno < m_ackno || recv_ackno > m_next_seq)
     {
-        m_outstanding.pop_front();
+        return;
     }
-
-    m_timer_start = !m_outstanding.empty();
+    while (!m_outstanding.empty() &&
+           recv_ackno >= (m_outstanding.front().seqno.unwrap(isn_, m_ackno) + m_outstanding.front().sequence_length()))
+    {
+        m_outstanding.pop();
+    }
+    if (!m_outstanding.empty() && recv_ackno > m_ackno)
+    {
+        m_refrence_time = m_remaining_RTO_ms = initial_RTO_ms_;
+    }
+    else
+    {
+        m_timer_start = false;
+    }
+    m_window = msg.window_size;
+    m_ackno = recv_ackno;
 }
 
 void TCPSender::tick(const size_t ms_since_last_tick)
 {
-    if (!m_timer_start)
+    m_remaining_RTO_ms = (m_remaining_RTO_ms > ms_since_last_tick) ? m_remaining_RTO_ms - ms_since_last_tick : 0;
+    m_timer_start = !m_outstanding.empty();
+    if (!m_timer_start || m_remaining_RTO_ms > 0)
     {
         return;
     }
-    m_remaining_RTO_ms -= ms_since_last_tick;
-    if (m_remaining_RTO_ms <= 0)
+    m_need_send.push(m_outstanding.front());
+    ++m_consecutive_retransmissions;
+    if (!m_ackno || m_window)
     {
-        m_need_send.push(m_outstanding.front().second);
-        ++m_consecutive_retransmissions;
-        m_remaining_RTO_ms = static_cast<uint64_t>(std::pow(2, m_consecutive_retransmissions)) * initial_RTO_ms_;
+        m_refrence_time = m_refrence_time * 2;
+        m_remaining_RTO_ms = m_refrence_time;
         return;
     }
+    m_remaining_RTO_ms = m_refrence_time = initial_RTO_ms_;
 }
